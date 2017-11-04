@@ -137,7 +137,7 @@ int ia_run(ia *a) {
       continue;
 
     ia_histogram_enable(bench);
-    if (bench == IA_ITERATE || bench == IA_GET)
+    if (bench == IA_ITERATE || bench == IA_GET || bench == IA_MIX_70_30 || bench == IA_MIX_50_50 || bench == IA_MIX_30_70)
       set_rd |= 1l << bench;
     else
       set_wr |= 1l << bench;
@@ -164,7 +164,7 @@ int ia_run(ia *a) {
 
   int rc =
       ia_kvgen_setup(!ioarena.conf.binary, ioarena.conf.ksize, key_nspaces,
-                     key_nsectors, ioarena.conf.count, ioarena.conf.kvseed);
+                     key_nsectors, ioarena.conf.keys, ioarena.conf.kvseed);
   if (rc) {
     ia_log("error: key-value generator setup failed, the options are correct?");
     return rc;

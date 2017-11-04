@@ -16,6 +16,7 @@ int ia_configinit(iaconfig *c) {
   if (c->path == NULL)
     return -1;
   c->count = 1000000;
+  c->keys  = c->count;
   c->ksize = 16;
   c->vsize = 32;
   c->csv_prefix = NULL;
@@ -91,7 +92,7 @@ static inline void ia_configusage(iaconfig *c) {
   ia_log("  -D <database_driver>");
   ia_log("     choices: %s", ia_supported());
   ia_log("  -B <benchmarks>");
-  ia_log("     choices: set, get, delete, iterate, batch, crud");
+  ia_log("     choices: set, get, delete, iterate, batch, crud, mix_70_30, mix_50_50, mix_30_70");
   ia_log("  -m <sync_mode>                     (default: %s)",
          ia_syncmode2str(c->syncmode));
   ia_log("     choices: sync, lazy, nosync");
@@ -101,11 +102,13 @@ static inline void ia_configusage(iaconfig *c) {
   ia_log("  -C <name-prefix> generate csv      (default: %s)", c->csv_prefix);
   ia_log("  -p <path> for temporaries          (default: %s)", c->path);
   ia_log("  -n <number_of_operations>          (default: %ju)", c->count);
+  ia_log("  -a <number_of_keys>                (default: number_of_operations)");
+  ia_log("     (only for get and mix_*_* workloads)");
   ia_log("  -k <key_size>                      (default: %d)", c->ksize);
   ia_log("  -v <value_size>                    (default: %d)", c->vsize);
   ia_log("  -c continuous completing mode      (default: %s)",
          c->continuous_completing ? "yes" : "no");
-  ia_log("  -r <number_of_read_threads>        (default: %d)", c->rthr);
+  ia_log("  -r <number_of_read_threads/mix_threads>        (default: %d)", c->rthr);
   ia_log("     `zero` to use single main/common thread");
   ia_log("  -w <number_of_crud/write_threads>  (default: %d)", c->wthr);
   ia_log("     `zero` to use single main/common thread");
@@ -119,7 +122,7 @@ static inline void ia_configusage(iaconfig *c) {
 
 int ia_configparse(iaconfig *c, int argc, char **argv) {
   int opt;
-  while ((opt = getopt(argc, argv, "hD:T:B:p:n:k:v:C:m:l:r:w:ic")) != -1) {
+  while ((opt = getopt(argc, argv, "hD:T:B:p:n:a:k:v:C:m:l:r:w:ic")) != -1) {
     switch (opt) {
     case 'D':
       if (c->driver)
@@ -145,7 +148,10 @@ int ia_configparse(iaconfig *c, int argc, char **argv) {
       break;
     case 'n':
       c->count = atoll(optarg);
+      c->keys = c->count;
       break;
+    case 'a':
+      c->keys = atoll(optarg);
     case 'k':
       c->ksize = atoi(optarg);
       break;
@@ -217,6 +223,10 @@ int ia_configparse(iaconfig *c, int argc, char **argv) {
       ia_log("error: unknown benchmark name '%s'", p);
       return -1;
     }
+    if (bench != IA_GET && bench != IA_MIX_70_30 && bench != IA_MIX_50_50 && bench != IA_MIX_30_70 && c->keys != c->count) {
+      ia_log("error: number of keys should be equal to number of operations for this type of workload");
+      return -1;
+    }
     c->benchmark_list[bench] = 1;
   }
   return 0;
@@ -239,6 +249,7 @@ void ia_configprint(iaconfig *c) {
   ia_log("  durability   = %s", ia_syncmode2str(c->syncmode));
   ia_log("  wal          = %s", ia_walmode2str(c->walmode));
   ia_log("  operations   = %ju", c->count);
+  ia_log("  keys         = %ju", c->keys);
   ia_log("  key size     = %d", c->ksize);
   ia_log("  value size   = %d", c->vsize);
   ia_log("  binary       = %s", c->binary ? "yes" : "no");
@@ -264,6 +275,12 @@ const char *ia_benchmarkof(iabenchmark b) {
     return "batch";
   case IA_CRUD:
     return "crud";
+  case IA_MIX_70_30:
+    return "mix_70_30";
+  case IA_MIX_50_50:
+    return "mix_50_50";
+  case IA_MIX_30_70:
+    return "mix_30_70";
   default:
     assert(0);
   }
@@ -283,5 +300,12 @@ iabenchmark ia_benchmark(const char *name) {
     return IA_BATCH;
   else if (strcasecmp(name, "crud") == 0 || strcasecmp(name, "transact") == 0)
     return IA_CRUD;
+  else if (strcasecmp(name, "mix_70_30") == 0)
+    return IA_MIX_70_30;
+  else if (strcasecmp(name, "mix_50_50") == 0)
+    return IA_MIX_50_50;
+  else if (strcasecmp(name, "mix_30_70") == 0)
+    return IA_MIX_30_70;
+
   return IA_MAX;
 }

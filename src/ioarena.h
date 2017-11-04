@@ -63,7 +63,11 @@ typedef enum {
   IA_DELETE,
   IA_ITERATE,
   IA_GET,
+  IA_MIX_70_30,  // 70% read / 30% write
+  IA_MIX_30_70,
+  IA_MIX_50_50,
   IA_MAX
+
 } iabenchmark;
 
 typedef enum { IA_SYNC, IA_LAZY, IA_NOSYNC } iasyncmode;

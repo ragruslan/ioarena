@@ -16,6 +16,10 @@ const long bench_mask_write =
 
 const long bench_mask_2keyspace = 0 | 1ull << IA_BATCH | 1ull << IA_CRUD;
 
+const unsigned int threshold_mix_70_30 = 716;  // 70% * 1024
+const unsigned int threshold_mix_50_50 = 512;  // 50% * 1024
+const unsigned int threshold_mix_30_70 = 307;  // 30% * 1024
+
 static void ia_keynotfound(iadoer *doer, const char *op, iakv *k) {
   ia_log("error: key %s not found (%s, #%d, %d+%d)", k->k, op, doer->nth,
          doer->key_space, doer->key_sequence);
@@ -53,6 +57,24 @@ static int ia_run_benchmark(iadoer *doer, iabenchmark bench) {
   // const char *name = ia_benchmarkof(bench);
   // ia_log("<< %s.%s-%d", ioarena.conf.driver, name, doer->nth);
 
+  iabenchmark bench_tmp = bench;
+  unsigned threshold_mix = 0;
+  unsigned xyz_congruential = doer->nth;
+
+  switch(bench) {
+  case IA_MIX_30_70:
+    threshold_mix = threshold_mix_30_70;
+    break;
+  case IA_MIX_50_50:
+    threshold_mix = threshold_mix_50_50;
+    break;
+  case IA_MIX_70_30:
+    threshold_mix = threshold_mix_70_30;
+    break;
+  default:
+    break;
+  }
+
   ia_histogram_reset(&doer->hg, bench);
 
   for (i = 0; rc == 0 && i < ioarena.conf.count;) {
@@ -61,21 +83,31 @@ static int ia_run_benchmark(iadoer *doer, iabenchmark bench) {
     int j;
 
     switch (bench) {
+    case IA_MIX_30_70:
+    case IA_MIX_50_50:
+    case IA_MIX_70_30:
+      xyz_congruential = xyz_congruential * 1664525 + 1013904223;
+      if (((xyz_congruential >> 16) & 1023) < threshold_mix) {
+        bench_tmp = IA_GET;
+      }
+      else {
+        bench_tmp = IA_SET;
+      }
     case IA_SET:
     case IA_DELETE:
     case IA_GET:
-      if (ia_kvgen_get(doer->gen_a, &a, bench != IA_SET))
+      if (ia_kvgen_get(doer->gen_a, &a, bench_tmp != IA_SET))
         goto bailout;
 
       t0 = ia_timestamp_ns();
-      rc = ioarena.driver->begin(doer->ctx, bench);
+      rc = ioarena.driver->begin(doer->ctx, bench_tmp);
       if (!rc)
-        rc = ioarena.driver->next(doer->ctx, bench, &a);
-      rc2 = ioarena.driver->done(doer->ctx, bench);
+        rc = ioarena.driver->next(doer->ctx, bench_tmp, &a);
+      rc2 = ioarena.driver->done(doer->ctx, bench_tmp);
       ia_histogram_add(&doer->hg, t0,
-                       bench == IA_DELETE ? a.ksize : a.ksize + a.vsize);
+                       bench_tmp == IA_DELETE ? a.ksize : a.ksize + a.vsize);
       if (rc == ENOENT) {
-        ia_keynotfound(doer, ia_benchmarkof(bench), &a);
+        ia_keynotfound(doer, ia_benchmarkof(bench_tmp), &a);
         if (ioarena.conf.ignore_keynotfound)
           rc = 0;
       }
